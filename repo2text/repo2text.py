@@ -2,29 +2,30 @@
 
 #!/usr/bin/env python3
 
+import argparse
 import os
 import sys
 import shutil
 import time
 from pathlib import Path
-from typing import List, Optional
-import pathlib
+from typing import List
 
 import colorama
 import pathspec
 import pyperclip
-import argparse
 
 
 def main() -> None:
     """
     Entry point for the repo2text command-line tool.
+    Converts a repository into an LLM-friendly text format,
+    copies it to the clipboard, and optionally writes it to a file.
     """
     # Initialize colorama
     colorama.init(autoreset=True)
 
     # Parse command-line arguments
-    parser = argparse_setup()
+    parser = setup_argparser()
     args = parser.parse_args()
 
     root_dir = args.root_dir
@@ -62,12 +63,13 @@ def main() -> None:
     print_info(f"Operation completed in {duration:.2f} seconds.")
 
 
-def argparse_setup() -> argparse.ArgumentParser:
+def setup_argparser() -> argparse.ArgumentParser:
     """
     Sets up the argument parser for the command-line interface.
-    """
-    import argparse
 
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(
         description='Convert an entire repository into an LLM-friendly text format and copy it to the clipboard.'
     )
@@ -211,8 +213,8 @@ def is_binary_file(file_path: str) -> bool:
             if b'\0' in chunk:
                 return True
     except Exception:
-        # If the file cannot be read, consider it non-binary to attempt reading
-        pass
+        # If the file cannot be read, consider it binary to omit it
+        return True
     return False
 
 
@@ -292,7 +294,7 @@ def print_truncated_content(content: str) -> None:
     Args:
         content (str): Truncated file content.
     """
-    print(f"{colorama.Fore.WHITE}{content}...{colorama.Style.RESET_ALL}")
+    print(f"{colorama.Fore.WHITE}{content}...\n{colorama.Style.RESET_ALL}")
 
 
 def print_warning(message: str) -> None:
@@ -353,7 +355,3 @@ def write_output_file(content: str, output_path: str) -> None:
         print_info(f"The repository has been written to '{output_path}'.")
     except Exception as e:
         print_error(f"Error writing to output file: {e}")
-
-
-if __name__ == '__main__':
-    main()

@@ -5,7 +5,6 @@
 import argparse
 import os
 import sys
-import shutil
 import time
 from pathlib import Path
 from typing import List
@@ -31,7 +30,9 @@ def main() -> None:
     root_dir = args.root_dir
 
     if not os.path.isdir(root_dir):
-        print_error(f"The specified root directory '{root_dir}' does not exist or is not a directory.")
+        print_error(
+            f"The specified root directory '{root_dir}' does not exist or is not a directory."
+        )
         sys.exit(1)
 
     # Change the current working directory to root_dir
@@ -45,18 +46,35 @@ def main() -> None:
     # Build project tree
     tree = build_project_tree(spec=spec)
 
-    # Collect files to include
-    files = collect_files(spec=spec)
+    if args.tree:
+        # Tree-only mode: just copy the tree structure
+        final_string = f"Project Tree:\n{tree}"
 
-    # Build the final string to copy
-    final_string = build_final_string(tree, files)
+        # Display the tree structure in the terminal with enhanced formatting
+        print()  # Add spacing before
+        print(f"{colorama.Fore.CYAN}{'='*50}{colorama.Style.RESET_ALL}")
+        print(f"{colorama.Fore.CYAN}PROJECT TREE STRUCTURE{colorama.Style.RESET_ALL}")
+        print(f"{colorama.Fore.CYAN}{'='*50}{colorama.Style.RESET_ALL}")
+        print()
+        print(f"{colorama.Fore.GREEN}{tree}{colorama.Style.RESET_ALL}")
+        print()
+        print(f"{colorama.Fore.CYAN}{'='*50}{colorama.Style.RESET_ALL}")
+        print()  # Add spacing after
 
-    # Copy to clipboard
-    copy_to_clipboard(final_string)
+        copy_to_clipboard(final_string)
 
-    # Optionally write to an output file
-    if args.output:
-        write_output_file(final_string, args.output)
+        # Optionally write to an output file
+        if args.output:
+            write_output_file(final_string, args.output)
+    else:
+        # Full mode: collect files and build complete output
+        files = collect_files(spec=spec)
+        final_string = build_final_string(tree, files)
+        copy_to_clipboard(final_string)
+
+        # Optionally write to an output file
+        if args.output:
+            write_output_file(final_string, args.output)
 
     end_time = time.time()
     duration = end_time - start_time
@@ -71,18 +89,21 @@ def setup_argparser() -> argparse.ArgumentParser:
         argparse.ArgumentParser: Configured argument parser.
     """
     parser = argparse.ArgumentParser(
-        description='Convert an entire repository into an LLM-friendly text format and copy it to the clipboard.'
+        description="Convert an entire repository into an LLM-friendly text format and copy it to the clipboard."
     )
     parser.add_argument(
-        'root_dir',
-        nargs='?',
-        default='.',
-        help='Root directory of the project (default: current directory)'
+        "root_dir",
+        nargs="?",
+        default=".",
+        help="Root directory of the project (default: current directory)",
     )
     parser.add_argument(
-        '-o',
-        '--output',
-        help='Output file to save the formatted repository (optional)'
+        "-o", "--output", help="Output file to save the formatted repository (optional)"
+    )
+    parser.add_argument(
+        "--tree",
+        action="store_true",
+        help="Only copy the repository structure (tree) without file contents",
     )
     return parser
 
@@ -95,39 +116,41 @@ def load_gitignore() -> pathspec.PathSpec:
         pathspec.PathSpec: Combined ignore patterns.
     """
     default_ignore_patterns = [
-        '.git/',
-        '.svn/',
-        '.hg/',
-        '.DS_Store',
-        '__pycache__/',
-        '*.pyc',
-        '*.pyo',
-        '*.pyd',
-        '*$py.class',
-        '*.so',
-        'build/',
-        'dist/',
-        'downloads/',
-        'eggs/',
-        '.eggs/',
-        'lib/',
-        'lib64/',
-        'parts/',
-        'sdist/',
+        ".git/",
+        ".svn/",
+        ".hg/",
+        ".DS_Store",
+        "__pycache__/",
+        "*.pyc",
+        "*.pyo",
+        "*.pyd",
+        "*$py.class",
+        "*.so",
+        "build/",
+        "dist/",
+        "downloads/",
+        "eggs/",
+        ".eggs/",
+        "lib/",
+        "lib64/",
+        "parts/",
+        "sdist/",
     ]
 
-    if os.path.exists('.gitignore'):
-        with open('.gitignore', 'r', encoding='utf-8') as gitignore_file:
+    if os.path.exists(".gitignore"):
+        with open(".gitignore", "r", encoding="utf-8") as gitignore_file:
             gitignore_lines = gitignore_file.readlines()
         if not gitignore_lines:
             print_warning("Alert: .gitignore is empty.")
-        gitignore_spec = pathspec.PathSpec.from_lines('gitwildmatch', gitignore_lines)
+        gitignore_spec = pathspec.PathSpec.from_lines("gitwildmatch", gitignore_lines)
     else:
-        print_warning("Alert: .gitignore file not found. Using default ignore patterns.")
-        gitignore_spec = pathspec.PathSpec.from_lines('gitwildmatch', [])
+        print_warning(
+            "Alert: .gitignore file not found. Using default ignore patterns."
+        )
+        gitignore_spec = pathspec.PathSpec.from_lines("gitwildmatch", [])
 
     # Combine .gitignore with default ignore patterns
-    default_spec = pathspec.PathSpec.from_lines('gitwildmatch', default_ignore_patterns)
+    default_spec = pathspec.PathSpec.from_lines("gitwildmatch", default_ignore_patterns)
     combined_spec = gitignore_spec + default_spec
     return combined_spec
 
@@ -143,32 +166,40 @@ def build_project_tree(spec: pathspec.PathSpec) -> str:
         str: Project tree as a string.
     """
     tree: List[str] = []
-    for root, dirs, files in os.walk('.'):
+    for root, dirs, files in os.walk("."):
         # Exclude ignored directories
         dirs[:] = [
-            d for d in dirs
-            if not spec.match_file(os.path.normpath(os.path.join(os.path.relpath(root, '.'), d)) + '/')
+            d
+            for d in dirs
+            if not spec.match_file(
+                os.path.normpath(os.path.join(os.path.relpath(root, "."), d)) + "/"
+            )
         ]
 
         # Determine the indentation level
-        rel_path = os.path.relpath(root, '.')
-        if rel_path == '.':
+        rel_path = os.path.relpath(root, ".")
+        if rel_path == ".":
             level = 0
         else:
             level = rel_path.count(os.sep) + 1
 
-        indent = ' ' * 4 * level
-        directory = os.path.basename(root) if rel_path != '.' else '.'
+        indent = " " * 4 * level
+        directory = os.path.basename(root) if rel_path != "." else "."
         tree.append(f"{indent}{directory}/")
 
         # Add files to the tree
-        subindent = ' ' * 4 * (level + 1)
+        subindent = " " * 4 * (level + 1)
         for file in sorted(files):
-            rel_file_path = os.path.normpath(os.path.join(os.path.relpath(root, '.'), file))
-            if not spec.match_file(rel_file_path) and Path(rel_file_path).name != '.gitignore':
+            rel_file_path = os.path.normpath(
+                os.path.join(os.path.relpath(root, "."), file)
+            )
+            if (
+                not spec.match_file(rel_file_path)
+                and Path(rel_file_path).name != ".gitignore"
+            ):
                 tree.append(f"{subindent}{file}")
 
-    return '\n'.join(tree)
+    return "\n".join(tree)
 
 
 def collect_files(spec: pathspec.PathSpec) -> List[str]:
@@ -182,16 +213,24 @@ def collect_files(spec: pathspec.PathSpec) -> List[str]:
         List[str]: List of file paths to include.
     """
     files_to_include: List[str] = []
-    for root, dirs, files in os.walk('.'):
+    for root, dirs, files in os.walk("."):
         # Exclude ignored directories
         dirs[:] = [
-            d for d in dirs
-            if not spec.match_file(os.path.normpath(os.path.join(os.path.relpath(root, '.'), d)) + '/')
+            d
+            for d in dirs
+            if not spec.match_file(
+                os.path.normpath(os.path.join(os.path.relpath(root, "."), d)) + "/"
+            )
         ]
 
         for file in sorted(files):
-            rel_file_path = os.path.normpath(os.path.join(os.path.relpath(root, '.'), file))
-            if not spec.match_file(rel_file_path) and Path(rel_file_path).name != '.gitignore':
+            rel_file_path = os.path.normpath(
+                os.path.join(os.path.relpath(root, "."), file)
+            )
+            if (
+                not spec.match_file(rel_file_path)
+                and Path(rel_file_path).name != ".gitignore"
+            ):
                 files_to_include.append(rel_file_path)
 
     return files_to_include
@@ -208,9 +247,9 @@ def is_binary_file(file_path: str) -> bool:
         bool: True if binary, False otherwise.
     """
     try:
-        with open(file_path, 'rb') as file:
+        with open(file_path, "rb") as file:
             chunk = file.read(1024)
-            if b'\0' in chunk:
+            if b"\0" in chunk:
                 return True
     except Exception:
         # If the file cannot be read, consider it binary to omit it
@@ -249,7 +288,7 @@ def build_final_string(tree: str, files: List[str]) -> str:
             output.append(f"{message}\n")
         else:
             try:
-                with open(file, 'r', encoding='utf-8', errors='replace') as f:
+                with open(file, "r", encoding="utf-8", errors="replace") as f:
                     lines = f.readlines()
                     if not lines:
                         message = "(Empty file)"
@@ -257,7 +296,7 @@ def build_final_string(tree: str, files: List[str]) -> str:
                         output.append(f"{message}\n")
                     else:
                         # Truncate to first 20 lines for display
-                        truncated_content = ''.join(lines[:20]).rstrip('\n')
+                        truncated_content = "".join(lines[:20]).rstrip("\n")
                         output.append(f"{''.join(lines)}\n")
                         print_truncated_content(truncated_content)
             except Exception as e:
@@ -266,7 +305,7 @@ def build_final_string(tree: str, files: List[str]) -> str:
                 output.append(f"{message}\n")
         print()  # Add an empty line for better readability
 
-    final_output = '\n'.join(output)
+    final_output = "\n".join(output)
     return final_output
 
 
@@ -350,7 +389,7 @@ def write_output_file(content: str, output_path: str) -> None:
         output_path (str): Path to the output file.
     """
     try:
-        with open(output_path, 'w', encoding='utf-8') as output_file:
+        with open(output_path, "w", encoding="utf-8") as output_file:
             output_file.write(content)
         print_info(f"The repository has been written to '{output_path}'.")
     except Exception as e:
